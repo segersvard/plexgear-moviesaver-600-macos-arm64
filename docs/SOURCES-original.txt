@@ -1,0 +1,54 @@
+Plexgear ARM64 v5, 2026-11-13
+
+Mål: Wii U 576i, 4:3, kompositvideo och USB-ljud utan Rosetta.
+Grund: egen MIT-kod från v4 samt GPL-2.0+-registersekvenser från Linux em28xx.
+All kod som bygger vidare på GPL-sekvenserna distribueras under GPL-2.0-or-later.
+Fristående parser- och ljudmoduler är MIT-märkta; ursprungliga MIT-notiser bevaras.
+
+V4:s USB-flöde har verifierats av Pierre. Ny asynkron köning, dekoderprofil,
+ljudval och WAV-kod är ännu inte hårdvaru- eller Mac-kompileringsverifierade.
+
+Primärkällor för de nya macOS-API:erna:
+https://developer.apple.com/documentation/iousbhost/iousbhostpipe
+https://developer.apple.com/documentation/audiotoolbox/audio-queue-services
+https://developer.apple.com/documentation/avfoundation/avcapturedevice
+
+V3/v4-grundinitieringen och PAL-höjdregistret 0x48 utgår från statisk analys
+av Kjells CapDriver_v19.147.10, EmpiaUSBDevice2828x::fDeviceInit respektive
+fSetHardwareCaptureDimension. Intel-programmet ska inte köras av lösningen.
+
+Tidigare hämtade Linux-källor och exakta blob-id:
+Plexgear videotest v2, 2026-11-13
+
+Kodlicens: GPL-2.0-or-later.
+Registersekvenser och paketprotokoll anpassade från Linux em28xx.
+Copyright (C) 2005 Ludovico Cavedon, Markus Rechberger,
+Mauro Carvalho Chehab, Sascha Sommer.
+Copyright (C) 2012 Frank Schäfer.
+
+Källfiler lästa via GitHub 2026-11-13:
+https://github.com/torvalds/linux/blob/master/drivers/media/usb/em28xx/em28xx-core.c
+Git blob SHA: 62a1c25a2de13e25fe25b8e8001244378d57190d
+
+https://github.com/torvalds/linux/blob/master/drivers/media/usb/em28xx/em28xx-video.c
+Git blob SHA: 84424284d4869b9b78933f0efffb662837024b50
+
+https://github.com/torvalds/linux/blob/master/drivers/media/usb/em28xx/em28xx-reg.h
+Git blob SHA: 8931733a8e2416d266371d59461b9a4eedf53a2a
+
+https://github.com/torvalds/linux/blob/master/drivers/media/usb/em28xx/em28xx.h
+Git blob SHA: 7f249ddf6179c84d1f3de73146dfed5e5fbb3395
+
+https://github.com/torvalds/linux/blob/master/drivers/media/usb/em28xx/em28xx-cards.c
+Git blob SHA: 1d4f30cba8de847708bb9b337216860621d201da
+
+Extern experimentrapport, inte samma hårdvarutest som vårt:
+https://tinymachines.ai/docs/nes/eyes-vs-scope
+Rapporten beskriver lyckad bulk-inspelning med EM2980/krets-id 146.
+Den angivna separata patchen har inte kunnat hämtas (repository svarade 404).
+Vårt program är därför ett eget experiment med Linux huvudgrens registersekvenser.
+
+Apples API-dokumentation finns i installerat macOS SDK, IOUSBHost.framework/Headers.
+https://developer.apple.com/documentation/iousbhost/iousbhostinterface
+https://developer.apple.com/documentation/iousbhost/iousbhostpipe
+
