@@ -8,6 +8,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Test parser and compile ARM64 prototype
-        run: make test all
+        run: make test all app
       - name: Check offline recovery tool syntax
         run: python3 -m py_compile tools/recover.py tools/make-mov.py
