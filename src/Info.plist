@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleIdentifier</key><string>se.segersvard.plexgear.paltest</string>
+<key>CFBundleName</key><string>Plexgear PAL-test</string>
+<key>CFBundleVersion</key><string>5.1</string>
+<key>NSMicrophoneUsageDescription</key><string>Testet spelar in tre sekunders ljud från Plexgear-digitaliserarens USB-ljudingång. Datorns mikrofon väljs inte.</string>
+</dict></plist>
