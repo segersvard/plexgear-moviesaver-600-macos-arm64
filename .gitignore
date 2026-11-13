@@ -1,0 +1,16 @@
+/build/
+/captures/
+/recovered/
+/Resultat-*/
+*.zip
+*.wav
+*.mov
+*.bin
+*.yuyv
+*.jpg
+*.png
+*.p12
+*.mobileprovision
+*.provisionprofile
+.DS_Store
+__pycache__/

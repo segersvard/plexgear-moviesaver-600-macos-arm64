@@ -1,0 +1,18 @@
+Plexgear macOS ARM64 research prototype, 2026.
+
+The combined capture program is distributed under GPL-2.0-or-later.
+Register sequences and protocol knowledge adapt Linux em28xx sources:
+Copyright (C) 2005 Ludovico Cavedon, Markus Rechberger,
+Mauro Carvalho Chehab, Sascha Sommer.
+Copyright (C) 2012 Frank Schäfer.
+See docs/sources.md and LICENSE. Preserve existing file-level notices.
+
+Files marked SPDX-License-Identifier: MIT retain their MIT license;
+see LICENSE-MIT. New build and documentation files are GPL-2.0-or-later.
+Offline recovery tools are MIT unless otherwise marked.
+
+The vendor Intel driver was inspected statically to compare this hardware
+variant's initialization and PAL geometry. No vendor executable is linked,
+executed or redistributed here. No firmware is included.
+
+Product names identify tested hardware only; no vendor endorsement is implied.
