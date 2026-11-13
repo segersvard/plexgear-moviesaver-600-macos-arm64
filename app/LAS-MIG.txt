@@ -1,0 +1,58 @@
+MOVIESAVER INSPELNING 0.1.0 – EXPERIMENTELL FÖRSTA VERSION
+
+För Plexgear Moviesaver 600, Kjell 99003, USB 1b80:e600, krets-id 146.
+Apple Silicon / ARM64. Ingen Rosetta. Ingen systemkameradrivrutin.
+
+1. Packa upp zip-filen. Öppna Moviesaver Inspelning.app.
+   Appen har lokal ad-hoc-signatur, men är inte Developer ID-signerad eller
+   notariserad. Om macOS blockerar den: välj Öppna ändå för just denna app i
+   Systeminställningar → Integritet och säkerhet, om alternativet erbjuds.
+   Stäng inte av Gatekeeper eller SIP. Du kan också bygga appen själv.
+2. Anslut digitaliseraren, PAL-kompositvideo till gul kontakt och stereoljud
+   till röd/vit kontakt. S-Video och NTSC är inte provade.
+3. Klicka Spela in och välj ett NYTT filnamn. Tillåt ljud-/mikrofonbehörighet.
+   Appen väljer USB 2828x-ljudingången, aldrig Macens standardmikrofon.
+4. Starta uppspelningen på VHS-spelaren eller annan källa. Bilden visas under
+   inspelningen, ungefär två gånger per sekund. Ingen ljudmedhörning finns.
+5. Klicka Stoppa och spara. Låt appen arbeta färdigt.
+6. Klicka Visa filerna och importera MOV-filen i ditt redigeringsprogram.
+
+BÖRJA MED ETT PROV PÅ 20–30 SEKUNDER
+Kontrollera färg, bildformat, ljud och läppsynk. Därefter behövs ett längre prov
+innan värdefulla VHS-band spelas in. Ny kontinuerlig USB-inspelning, avbrott och
+långtidssynk är ännu inte hårdvaruverifierade. Programmet stannar efter max fyra
+timmar; det är en gräns i programmet, inte en verifierad inspelningslängd.
+
+FORMAT OCH UTRYMME
+MOV med Motion JPEG, 768×576 (4:3), nominellt 25 bildpar/s och PCM-stereoljud
+48 kHz/16 bit. PAL-fälten vävs samman. Ingen avflätning görs, så rörelser kan
+visa kamränder i förhandsvisningen. Detta är en första inspelningsversion,
+inte ett färdigverifierat arkiveringsformat. Stödet måste provas i den editor
+du använder. MP4/H.264 kan läggas till senare.
+
+Bildtider följer USB-frame-numren; förlorade fält komprimerar inte tidslinjen.
+Ljudets start placeras med AudioQueue-värdtid. Långvarig klockdrift korrigeras
+ännu inte och är inte uppmätt. Tyst ljud är giltigt och räknas inte som fel.
+
+En delmaterial-mapp skapas intill filmen. Den innehåller video.mov,
+wiiu-ljud.wav, tidsinformation, preview.jpg och inspelning.log. Dessa filer
+behålls även när slutfilen är sparad, vilket kräver extra diskutrymme. Ta
+själv bort delmaterialet först när du har kontrollerat slutfilen. Filer kan
+bli stora vid längre inspelning. Inga inspelningar skickas till någon tjänst.
+
+OM NÅGOT INTE FUNGERAR
+Stoppa ordnat med appens knapp. Vid USB-fel: koppla ur och återanslut
+adaptern innan ett nytt försök. Om exporten misslyckas, behåll delmaterialet.
+Delvis skapad slutfil kan vara oläsbar; video.mov/WAV och loggen behövs då.
+
+Appens motor ändrar video- och dekoderregister för PAL och försöker återställa
+sparade register efteråt. Intern dekoderstatus är inte separat verifierad.
+Ingen firmware skrivs. Energi-registret 0x0c ändras inte.
+
+KÄLLKOD OCH LICENS
+Samlat program: GPL-2.0-or-later. MIT-märkta moduler behåller sina licenser.
+Fullständig motsvarande källkod, licenser och bygginstruktioner finns i samma
+leverans under Kallkod/. Kör make test all app på en Apple Silicon-Mac med
+Apples Command Line Tools. Projektets tidigare version finns på:
+https://github.com/segersvard/plexgear-moviesaver-600-macos-arm64
+Denna appversion är ännu inte publicerad där om inget annat anges.
