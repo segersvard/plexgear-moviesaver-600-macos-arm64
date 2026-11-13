@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Bygger vidare på ARM64 v4 (MIT) och registersekvenser från Linux em28xx (GPL-2.0+).
 // Linux-författare: Ludovico Cavedon, Markus Rechberger, Mauro Carvalho Chehab,
-// Sascha Sommer, Frank Schäfer. Se KALLOR.txt och licensfilerna.
+// Sascha Sommer, Frank Schäfer. Se docs/sources.md och licensfilerna.
 #import <Foundation/Foundation.h>
 #import <AppKit/AppKit.h>
 #import <IOUSBHost/IOUSBHost.h>
@@ -11,6 +11,11 @@
 #include <signal.h>
 #include <unistd.h>
 #include <time.h>
+#include <stdatomic.h>
+#ifdef PG_RECORDER
+#import "../app/movie.h"
+#import <CoreAudio/HostTime.h>
+#endif
 #if !defined(__arm64__)
 #error Programmet måste byggas för ARM64.
 #endif
@@ -136,7 +141,10 @@ static BOOL saveFieldPNG(const uint8_t *src,NSString *path){
     PGFieldParser *_parser;
     IOUSBHostInterface *_usb;IOUSBHostPipe *_pipe;
     dispatch_group_t _group;NSMutableArray<PGBuffer *> *_buffers;NSString *_directory;
-    FILE *_raw,*_log;BOOL _running,_failed,_pngSaved,_fieldSeen;NSData *_firstField;int _firstParity;uint64_t _nextFrame,_bytes,_packets,_badPackets;double _deadline;
+#ifdef PG_RECORDER
+    PGMovie *_movie;double _epoch,_fieldTime;uint64_t _baseFrame;uint8_t _fieldCounter;
+#endif
+    FILE *_raw,*_log;atomic_bool _failed;BOOL _running,_pngSaved,_fieldSeen;NSData *_firstField;int _firstParity;uint64_t _nextFrame,_bytes,_packets,_badPackets;double _deadline;
 }
 -(instancetype)initWithUSB:(IOUSBHostInterface *)usb pipe:(IOUSBHostPipe *)pipe directory:(NSString *)directory;
 -(BOOL)submit:(PGBuffer *)buffer;
@@ -147,6 +155,10 @@ static BOOL saveFieldPNG(const uint8_t *src,NSString *path){
 /* Tar emot ett komplett fält från C-parsern och sparar första stillbilden; returnerar inget. */
 static void fieldReady(const uint8_t *field,size_t length,int parity,void *context){
     PGStream *stream=(__bridge PGStream *)context;
+#ifdef PG_RECORDER
+    (void)length;(void)parity;
+    [stream->_movie field:field counter:stream->_fieldCounter time:stream->_fieldTime];return;
+#endif
     if(stream->_fieldSeen)return;stream->_fieldSeen=YES;
     stream->_firstField=[NSData dataWithBytes:field length:length];stream->_firstParity=parity;
     printf("Första kompletta fältet mottaget: %zu byte, paritet %d. PNG skapas efter att USB-kön tömts.\n",length,parity);
@@ -154,9 +166,12 @@ static void fieldReady(const uint8_t *field,size_t length,int parity,void *conte
 @implementation PGStream
 /* Öppnar diagnostikfiler och allokerar parser och buffertar för en köad isokron ström; returnerar objekt eller nil. */
 -(instancetype)initWithUSB:(IOUSBHostInterface *)usb pipe:(IOUSBHostPipe *)pipe directory:(NSString *)directory{
-    if((self=[super init])){_usb=usb;_pipe=pipe;_directory=[directory copy];_group=dispatch_group_create();_buffers=[NSMutableArray array];_parser=calloc(1,sizeof(*_parser));if(!_parser)return nil;pg_init(_parser,fieldReady,(__bridge void *)self);
+    if((self=[super init])){atomic_init(&_failed,false);_usb=usb;_pipe=pipe;_directory=[directory copy];_group=dispatch_group_create();_buffers=[NSMutableArray array];_parser=calloc(1,sizeof(*_parser));if(!_parser)return nil;pg_init(_parser,fieldReady,(__bridge void *)self);
+        #ifndef PG_RECORDER
         _raw=fopen([directory stringByAppendingPathComponent:@"video-usb.bin"].fileSystemRepresentation,"wb");_log=fopen([directory stringByAppendingPathComponent:@"videopaket.tsv"].fileSystemRepresentation,"w");if(!_raw||!_log)return nil;
-        fprintf(_log,"frame\tmikro\tstatus\tbyte\traw_offset\tforsta_8_byte\n");for(int i=0;i<4;i++)[_buffers addObject:[PGBuffer new]];
+        fprintf(_log,"frame\tmikro\tstatus\tbyte\traw_offset\tforsta_8_byte\n");
+        #endif
+        for(int i=0;i<4;i++)[_buffers addObject:[PGBuffer new]];
     }return self;
 }
 /* Frigör resurser efter att sista callbacken släppt sitt ägarskap; tar inga argument och returnerar inget. */
@@ -177,19 +192,54 @@ static void fieldReady(const uint8_t *field,size_t length,int parity,void *conte
     IOUSBHostIsochronousTransaction *t=buffer.transactions.mutableBytes;const uint8_t *base=buffer.data.bytes;
     for(int i=0;i<64;i++){_packets++;size_t n=t[i].completeCount,offset=t[i].offset;
         if(n>3072||offset>buffer.data.length||n>buffer.data.length-offset){_failed=YES;_running=NO;pg_feed(_parser,NULL,0,0);continue;}
-        const uint8_t *p=base+offset;fprintf(_log,"%llu\t%d\t%08x\t%zu\t%llu\t",(unsigned long long)buffer.frame,i,(unsigned)t[i].status,n,(unsigned long long)_bytes);
+        const uint8_t *p=base+offset;
+        #ifndef PG_RECORDER
+        fprintf(_log,"%llu\t%d\t%08x\t%zu\t%llu\t",(unsigned long long)buffer.frame,i,(unsigned)t[i].status,n,(unsigned long long)_bytes);
         for(size_t j=0;j<MIN(n,8);j++)fprintf(_log,"%02x",p[j]);fputc('\n',_log);
+        #endif
         BOOL success=status==kIOReturnSuccess&&t[i].status==kIOReturnSuccess;if(!success)_badPackets++;
+        #ifndef PG_RECORDER
         if(n){if(_bytes+n>64*1024*1024||fwrite(p,1,n,_raw)!=n){_failed=YES;_running=NO;pg_feed(_parser,NULL,0,0);break;}_bytes+=n;}
+        #else
+        _bytes+=n;
+        if(_movie.failed){_failed=YES;_running=NO;}
+        #endif
         pg_feed(_parser,p,n,success);
+        #ifdef PG_RECORDER
+        if(success&&n>=4&&p[0]==0x22&&p[1]==0x5a){_fieldCounter=p[2];_fieldTime=_epoch+((double)buffer.frame-(double)_baseFrame)/1000.0+i/8000.0;}
+        #endif
     }
 }
 /* Håller fyra USB-begäranden köade i cirka tre sekunder och tömmer kön; returnerar om en fullständig fältbild sparades. */
 -(BOOL)run{
-    dispatch_sync(pgQueue,^{uint64_t current=[self->_usb frameNumberWithTime:NULL];if(!current){puts("Kan inte läsa USB-kontrollerns frame-nummer. Ingen köad överföring startas.");self->_failed=YES;return;}self->_running=YES;self->_deadline=pgNow()+3;self->_nextFrame=current+20;for(PGBuffer *buffer in self->_buffers){if(![self submit:buffer])break;}});
+#ifdef PG_RECORDER
+    _movie=[[PGMovie alloc]initWithDirectory:_directory epoch:0];if(!_movie)return NO;
+#endif
+    dispatch_sync(pgQueue,^{uint64_t current=[self->_usb frameNumberWithTime:NULL];if(!current){puts("Kan inte läsa USB-kontrollerns frame-nummer. Ingen köad överföring startas.");self->_failed=YES;return;}
+#ifdef PG_RECORDER
+self->_baseFrame=current;self->_epoch=AudioConvertHostTimeToNanos(AudioGetCurrentHostTime())/1e9;[self->_movie setEpoch:self->_epoch];
+#endif
+self->_running=YES;
+#ifdef PG_RECORDER
+self->_deadline=pgNow()+4*60*60;
+#else
+self->_deadline=pgNow()+3;
+#endif
+self->_nextFrame=current+20;for(PGBuffer *buffer in self->_buffers){if(![self submit:buffer])break;}});
+#ifdef PG_RECORDER
+    // Väntar i korta intervall så signal, filfel och fyratimmarsgräns hanteras ordnat.
+    long wait;do{wait=dispatch_group_wait(_group,dispatch_time(DISPATCH_TIME_NOW,NSEC_PER_SEC));}while(wait&&!stopped&&!_failed&&pgNow()<_deadline+2);
+#else
     long wait=dispatch_group_wait(_group,dispatch_time(DISPATCH_TIME_NOW,6*NSEC_PER_SEC));
+#endif
+#ifdef PG_RECORDER
+    if(wait&&stopped){dispatch_sync(pgQueue,^{self->_running=NO;});wait=dispatch_group_wait(_group,dispatch_time(DISPATCH_TIME_NOW,2*NSEC_PER_SEC));}
+#endif
     if(wait){dispatch_sync(pgQueue,^{self->_running=NO;self->_failed=YES;});NSError *error=nil;[_pipe abortWithError:&error];wait=dispatch_group_wait(_group,dispatch_time(DISPATCH_TIME_NOW,2*NSEC_PER_SEC));if(wait){puts("USB-kön kunde inte tömmas. Ingen fortsatt bildtolkning godkänns.");return NO;}}
     dispatch_sync(pgQueue,^{self->_running=NO;if(self->_raw)fflush(self->_raw);if(self->_log)fflush(self->_log);});
+#ifdef PG_RECORDER
+    _pngSaved=[_movie finish];
+#endif
     if(_firstField){BOOL rawOK=[_firstField writeToFile:[_directory stringByAppendingPathComponent:@"forsta-faltet.yuyv"] atomically:YES];_pngSaved=saveFieldPNG(_firstField.bytes,[_directory stringByAppendingPathComponent:@"wiiu-forsta-bild.png"]);printf("Stillbild från paritet %d: råfält=%s, 4:3-PNG=%s.\n",_firstParity,rawOK?"sparat":"fel",_pngSaved?"sparad":"fel");}
     printf("Video: %llu byte, %llu paket, %llu paket med fel; fälthuvuden=%llu, kompletta=%llu, underkända=%llu, VBI=%llu.\n",(unsigned long long)_bytes,(unsigned long long)_packets,(unsigned long long)_badPackets,(unsigned long long)_parser->headers,(unsigned long long)_parser->complete,(unsigned long long)_parser->rejected,(unsigned long long)_parser->vbi);
     return !_failed&&_pngSaved;
@@ -217,7 +267,11 @@ static int capturePAL(NSString *directory,BOOL useAudio){
         IOUSBHostPipe *pipe=[usb copyPipeWithAddress:0x82 error:&error];if(!pipe){printf("Videopipe saknas: %s\n",error.description.UTF8String);break;}
         PGStream *stream=[[PGStream alloc]initWithUSB:usb pipe:pipe directory:directory];if(!stream){puts("Kan inte skapa videobuffertar eller resultatfiler.");break;}
         if(useAudio)audio=pg_audio_start(directory);
+#ifdef PG_RECORDER
+        puts("Spelar in PAL 576i. Stoppa med appens knapp eller Ctrl-C. Maximal tid fyra timmar.");
+#else
         puts("Provar Wii U: PAL 576i, komposit, 4:3. Fyra videobuffertar hålls köade under cirka tre sekunder.");
+#endif
         BOOL image=[stream run];BOOL audioOK=pg_audio_stop(audio);audio=NULL;
         uint8_t healthy=0;BOOL control=hardwareTransfer(usb,0x0a,&healthy,NO)&&healthy==146;
         printf("Resultat: komplett fältbild=%s, USB-ljud med icke-nollprover=%s, kontrollkanal=%s.\n",image?"JA":"NEJ",audioOK?"JA":"NEJ",control?"OK":"fel");

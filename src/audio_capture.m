@@ -8,7 +8,8 @@
 #include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
-struct PGAudio {AudioQueueRef queue;AudioFileID file;atomic_bool running;SInt64 packets;uint64_t samples;double squareSum;int peak;OSStatus error;};
+static NSString *pgTimingDirectory;
+struct PGAudio {AudioQueueRef queue;AudioFileID file;atomic_bool running;SInt64 packets;uint64_t samples;double squareSum;int peak;OSStatus error;double firstHostSeconds;};
 
 /* Kontrollerar ljudbehörighet och låter macOS visa sin dialog vid behov; tar inga argument och returnerar status. */
 BOOL pg_audio_permission(void){
@@ -47,10 +48,11 @@ static CFStringRef findUSBInput(void){
 
 /* Skriver ett PCM-ljudblock till WAV och återköar bufferten; tar AudioQueue-argument och returnerar inget. */
 static void audioInput(void *context,AudioQueueRef queue,AudioQueueBufferRef buffer,const AudioTimeStamp *time,UInt32 packetCount,const AudioStreamPacketDescription *descriptions){
-    (void)time;(void)packetCount;(void)descriptions;PGAudio *a=context;if(!atomic_load(&a->running))return;
+    (void)packetCount;(void)descriptions;PGAudio *a=context;if(!atomic_load(&a->running))return;
     UInt32 count=buffer->mAudioDataByteSize/4;
     if(buffer->mAudioDataByteSize%4){a->error=kAudio_ParamError;return;}
     if(count){
+        if(!a->packets&&time&&(time->mFlags&kAudioTimeStampHostTimeValid))a->firstHostSeconds=AudioConvertHostTimeToNanos(time->mHostTime)/1e9;
         OSStatus status=AudioFileWritePackets(a->file,false,buffer->mAudioDataByteSize,NULL,a->packets,&count,buffer->mAudioData);
         if(status!=noErr){a->error=status;return;}a->packets+=count;
         const int16_t *samples=buffer->mAudioData;size_t n=(size_t)count*2;
@@ -61,6 +63,7 @@ static void audioInput(void *context,AudioQueueRef queue,AudioQueueBufferRef buf
 
 /* Skapar stereo 48 kHz/16-bit WAV från den identifierade USB-ljudingången; tar målmapppen och returnerar kontext eller NULL. */
 PGAudio *pg_audio_start(NSString *directory){
+    pgTimingDirectory=[directory copy];
     CFStringRef uid=findUSBInput();if(!uid){puts("Ingen USB 2828x-ljudingång hittades. Ingen annan mikrofon spelas in.");return NULL;}
     PGAudio *a=calloc(1,sizeof(*a));if(!a){CFRelease(uid);return NULL;}atomic_init(&a->running,false);
     AudioStreamBasicDescription format={0};format.mSampleRate=48000;format.mFormatID=kAudioFormatLinearPCM;format.mFormatFlags=kAudioFormatFlagIsSignedInteger|kAudioFormatFlagIsPacked;format.mBytesPerPacket=4;format.mFramesPerPacket=1;format.mBytesPerFrame=4;format.mChannelsPerFrame=2;format.mBitsPerChannel=16;
@@ -74,11 +77,12 @@ PGAudio *pg_audio_start(NSString *directory){
     puts("USB-ljud startat: WAV, stereo, 48 kHz, 16 bit. Ingen dator-mikrofon används.");return a;
 }
 
-/* Stoppar AudioQueue innan statistik läses och stänger WAV; tar kontext och returnerar om icke-nollprover fångats. */
+/* Stoppar AudioQueue innan statistik läses och stänger WAV; tar kontext och returnerar om ljudprover sparats utan fil- eller köfel. */
 BOOL pg_audio_stop(PGAudio *a){
     if(!a)return NO;atomic_store(&a->running,false);OSStatus stop=AudioQueueStop(a->queue,true);AudioQueueDispose(a->queue,true);OSStatus close=AudioFileClose(a->file);
     double rms=a->samples?sqrt(a->squareSum/a->samples)/32768.0:0;
     printf("Ljud: %.3f s, topp %.2f %% av full skala, RMS %.4f, callbackfel=%d, stopp=%d, filstängning=%d.\n",a->packets/48000.0,a->peak*100.0/32768.0,rms,(int)a->error,(int)stop,(int)close);
-    BOOL success=a->samples>0&&a->peak>0&&a->error==noErr&&stop==noErr&&close==noErr;
-    puts(success?"Ljudprover med icke-nollnivå sparade. Lyssna på wiiu-ljud.wav för att verifiera källljudet.":"USB-källljud är inte verifierat; kontrollera rapporten och WAV-filen.");free(a);return success;
+    NSData *timing=[NSJSONSerialization dataWithJSONObject:@{@"first_host_seconds":@(a->firstHostSeconds),@"sample_frames":@(a->packets)} options:0 error:NULL];[timing writeToFile:[pgTimingDirectory stringByAppendingPathComponent:@"audio-timing.json"] atomically:YES];
+    BOOL success=a->samples>0&&a->error==noErr&&stop==noErr&&close==noErr;
+    puts(success?"Ljudprover sparade. Även tyst ljud är giltigt; lyssna på WAV-filen för att verifiera källan.":"USB-källljud är inte verifierat; kontrollera rapporten och WAV-filen.");free(a);return success;
 }
