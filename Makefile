@@ -32,3 +32,13 @@ replay: build/test-real-capture
 
 clean:
 	rm -rf build
+
+.PHONY: app
+app: build/recorder build/Moviesaver
+	bash app/package.sh
+
+build/recorder: app/record-main.m app/movie.m app/movie.h src/plexgear-pal.m src/audio_capture.m build/field_parser.o
+	$(CC) $(CFLAGS) -Wno-deprecated-declarations -fobjc-arc -fblocks $(FRAMEWORKS) -framework CoreMedia -Wl,-sectcreate,__TEXT,__info_plist,app/Info.plist app/record-main.m app/movie.m src/audio_capture.m build/field_parser.o -o $@
+
+build/Moviesaver: app/App.m
+	$(CC) $(CFLAGS) -Wno-deprecated-declarations -fobjc-arc -fblocks -framework AppKit -framework AVFoundation -framework UniformTypeIdentifiers $< -o $@

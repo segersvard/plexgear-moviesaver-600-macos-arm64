@@ -6,7 +6,38 @@ Native ARM64 research prototype for the Plexgear Moviesaver 600 / Movie Digitize
 
 **Status: short PAL capture works on one tested unit. This is not yet an installable system camera driver.** No Rosetta, vendor executable, kernel extension or firmware download is used.
 
-The goal is a modern Core Media I/O Camera Extension that exposes the hardware to macOS camera clients. OBS, Final Cut Pro and iMovie compatibility must each be tested; this repository does not currently provide that integration.
+The current goal is a standalone recorder that saves video and audio for later import into an editor. A Core Media I/O Camera Extension remains a possible future project. OBS live capture, Final Cut Pro and iMovie import compatibility must each be tested; no system camera integration is provided.
+
+## Standalone recorder app (experimental 0.1.0)
+
+A first AppKit recorder now builds with `make app`. It provides record/stop,
+periodic preview during recording and a MOV file for later import. It uses the
+same native USB initialization, with a bounded field/JPEG queue and a four-hour
+stop limit instead of the three-second raw diagnostic capture. No system camera
+extension is needed. There is no live streaming or audio monitoring.
+
+The ZIP in `build/Moviesaver-Inspelning-v0.1.0.zip` includes the locally ad-hoc
+signed app, Swedish instructions and complete corresponding source. It is not
+Developer ID signed or notarized. Normal app approval may be needed; no security
+protection is disabled by the package. The bundle is staged outside the source
+folder before signing to avoid Finder metadata introduced by cloud file providers.
+
+Video is Motion JPEG, 768×576 at nominal 25 interlaced field pairs per second;
+there is no deinterlacing. Audio is PCM stereo, 48 kHz/16 bit. Packet timing is
+retained when frames are dropped; AudioQueue host timestamps align audio start.
+Long-term clock drift is not measured or corrected. Intermediate MOV/WAV files
+are retained beside the finished file; allow space for both intermediate and
+final movies. An export failure does not delete the intermediate material.
+
+**Validation:** native compilation, original parser tests and an offline replay
+of all 73 recorded frames into a MOV with a readable audio track succeeded.
+The new continuous USB recording path and app UI have not yet been verified on
+hardware. Start with a 20–30 second trial, inspect A/V sync, then test longer.
+The four-hour limit is not a claim that four-hour recordings have been verified.
+
+See `app/LAS-MIG.txt` for use and limitations. This app does not change the
+system-camera status described below. The original three-second CLI remains
+available as `build/plexgear-pal`.
 
 ## Verified so far
 
